@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+option go_package = "github.com/hfam/kne/proto/topo";
+
+package topo;
+
+// Build with protoc -I=proto --go_out=proto/topo proto/topo.proto
+
+
+// Topology message defines what nodes and links will be created inside the mesh.
+message Topology {
+  string name = 1; // Name of the topology - will be linked to the cluster name
+  repeated Node nodes = 2; // List of nodes in the topology
+  repeated Link links = 3; // connections between Nodes.
+}
+
+
+// Node is a single container inside the topology
+message Node {
+  enum Type {
+    Unknown = 0;
+    Host = 1;
+    AristaCEOS = 2;
+    JuniperCEVO = 3;
+    CiscoCXR = 4;
+  }
+
+  string name = 1;
+  Type type = 2;
+  string version = 3;
+  map<string,string> labels = 4;
+}
+
+// Link is single link between nodes in the topology.
+message Link {
+  string a_node = 1;
+  string a_int = 2;
+  string z_node = 3;
+  string z_int = 4; 
+}
