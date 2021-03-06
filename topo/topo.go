@@ -100,12 +100,30 @@ func Load(fName string) (*topopb.Topology, error) {
 	return t, nil
 }
 
+// Config is the per node specific configuration.
+type Config struct {
+	command      []string
+	args         []string
+	image        string
+	env          []string
+	sleep        int
+	entryCmd     string
+	cfgPath      string
+	bootFileName string
+	bootFile     string
+}
+
+// Node is a node in the cluster.
 type Node struct {
+	id        int
 	namespace string
 	pb        *topopb.Node
 	kClient   *kubernetes.Clientset
+	cfg       Config
 }
 
+// NewNode creates a new node for use in the k8s cluster.  Configure will push the node to
+// the cluster.
 func NewNode(namespace string, pb *topopb.Node, kClient *kubernetes.Clientset) *Node {
 	return &Node{
 		namespace: namespace,
@@ -114,6 +132,30 @@ func NewNode(namespace string, pb *topopb.Node, kClient *kubernetes.Clientset) *
 	}
 }
 
+// Configure creates the node on the k8s cluster.
+func (n *Node) Configure(ctx context.Context) error {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-config", n.pb.Name),
+		},
+		Data: map[string]string{
+			n.cfg.bootFileName: n.cfg.bootFile,
+		},
+	}
+	sCM, err := n.kClient.CoreV1().ConfigMaps(n.namespace).Create(ctx, cm, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	log.Infof("Server Config Map:\n%v\n", sCM)
+	return nil
+}
+
+// Delete removes the Node from the cluster.
+func (n *Node) Delete(ctx context.Context) error {
+	return n.kClient.CoreV1().ConfigMaps(n.namespace).Delete(ctx, fmt.Sprintf("%s-config", n.pb.Name), metav1.DeleteOptions{})
+}
+
+// Pod returns the pod definition for the node.
 func (n *Node) Pod(ctx context.Context) (*corev1.Pod, error) {
 	return n.kClient.CoreV1().Pods(n.namespace).Get(ctx, n.pb.Name, metav1.GetOptions{})
 }
