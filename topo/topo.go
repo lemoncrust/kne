@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -111,6 +112,8 @@ type Config struct {
 	cfgPath      string
 	bootFileName string
 	bootFile     string
+	inside       int32
+	outside      int32
 }
 
 // Node is a node in the cluster.
@@ -153,6 +156,49 @@ func (n *Node) Configure(ctx context.Context) error {
 // Delete removes the Node from the cluster.
 func (n *Node) Delete(ctx context.Context) error {
 	return n.kClient.CoreV1().ConfigMaps(n.namespace).Delete(ctx, fmt.Sprintf("%s-config", n.pb.Name), metav1.DeleteOptions{})
+}
+
+// CreateService add the service definition for the Node.
+func (n *Node) CreateService(ctx context.Context) error {
+	s := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("service-%s", n.pb.Name),
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{{
+				Name:       fmt.Sprintf("port-%d", n.cfg.outside),
+				Protocol:   "TCP",
+				Port:       n.cfg.inside,
+				TargetPort: intstr.FromInt(int(n.cfg.inside)),
+				NodePort:   n.cfg.outside,
+			}},
+			Selector: map[string]string{
+				"app": n.pb.Name,
+			},
+			Type: "NodePort",
+		},
+	}
+	sS, err := n.kClient.CoreV1().Services(n.namespace).Create(ctx, s, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	log.Infof("Created Service:\n%v\n", sS)
+	return nil
+}
+
+// DeleteService removes the service definition for the Node.
+func (n *Node) DeleteService(ctx context.Context) error {
+	i := int64(0)
+	return n.kClient.CoreV1().Services(n.namespace).Delete(ctx, fmt.Sprintf("service-%s", n.pb.Name), metav1.DeleteOptions{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+		},
+		GracePeriodSeconds: &i,
+	})
 }
 
 // Pod returns the pod definition for the node.
