@@ -3,15 +3,20 @@ package topo
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 
 	log "github.com/sirupsen/logrus"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/remotecommand"
 
 	"github.com/golang/protobuf/proto"
 	topopb "github.com/hfam/kne/proto/topo"
@@ -28,6 +33,7 @@ var (
 // Manager is a topology instance manager for k8s cluster instance.
 type Manager struct {
 	clientset *kubernetes.Clientset
+	rCfg      *rest.Config
 	tpb       *topopb.Topology
 	nodes     map[string]*Node
 	links     map[string]*Link
@@ -36,20 +42,25 @@ type Manager struct {
 // New creates a new topology manager based on the provided kubecfg and topology.
 func New(kubecfg string, tpb *topopb.Topology) (*Manager, error) {
 	log.Infof("Creating manager for: %s", tpb.Name)
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", kubecfg)
+	// use the current context in kubeconfig try incluster first if not fallback to kubeconfig
+	log.Infof("trying in-cluster configuration")
+	rCfg, err := rest.InClusterConfig()
 	if err != nil {
-		return nil, err
+		log.Infof("falling back to kubeconfig: %q", kubecfg)
+		rCfg, err = clientcmd.BuildConfigFromFlags("", kubecfg)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	// create the clientset
-	clientset, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(rCfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Manager{
 		clientset: clientset,
+		rCfg:      rCfg,
 		tpb:       tpb,
 	}, nil
 }
@@ -63,6 +74,7 @@ func (m *Manager) Create(ctx context.Context) error {
 			namespace: m.tpb.Name,
 			pb:        n,
 			kClient:   m.clientset,
+			rCfg:      m.rCfg,
 		}
 	}
 	for _, l := range m.tpb.Links {
@@ -122,15 +134,17 @@ type Node struct {
 	namespace string
 	pb        *topopb.Node
 	kClient   *kubernetes.Clientset
+	rCfg      *rest.Config
 	cfg       Config
 }
 
 // NewNode creates a new node for use in the k8s cluster.  Configure will push the node to
 // the cluster.
-func NewNode(namespace string, pb *topopb.Node, kClient *kubernetes.Clientset) *Node {
+func NewNode(namespace string, pb *topopb.Node, kClient *kubernetes.Clientset, rCfg *rest.Config) *Node {
 	return &Node{
 		namespace: namespace,
 		pb:        pb,
+		rCfg:      rCfg,
 		kClient:   kClient,
 	}
 }
@@ -199,6 +213,41 @@ func (n *Node) DeleteService(ctx context.Context) error {
 		},
 		GracePeriodSeconds: &i,
 	})
+}
+
+// Exec will make a connection via spdy transport to the Pod and execute the provided command.
+// It will wire up stdin, stdout, stderr to provided io channels.
+func (n *Node) Exec(ctx context.Context, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	req := n.kClient.CoreV1().RESTClient().Post().Resource("pods").Name(n.pb.Name).Namespace(n.namespace).SubResource("exec")
+	opts := &v1.PodExecOptions{
+		Command: cmd,
+		Stdin:   true,
+		Stdout:  true,
+		Stderr:  true,
+		TTY:     true,
+	}
+	if stdin == nil {
+		opts.Stdin = false
+	}
+	req.VersionedParams(
+		opts,
+		scheme.ParameterCodec,
+	)
+
+	exec, err := remotecommand.NewSPDYExecutor(n.rCfg, "POST", req.URL())
+	if err != nil {
+		return err
+	}
+	err = exec.Stream(remotecommand.StreamOptions{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Pod returns the pod definition for the node.
