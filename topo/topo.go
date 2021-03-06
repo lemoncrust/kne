@@ -238,16 +238,20 @@ func (n *Node) Exec(ctx context.Context, cmd []string, stdin io.Reader, stdout i
 	if err != nil {
 		return err
 	}
-	err = exec.Stream(remotecommand.StreamOptions{
+	return exec.Stream(remotecommand.StreamOptions{
 		Stdin:  stdin,
 		Stdout: stdout,
 		Stderr: stderr,
 	})
-	if err != nil {
-		return err
-	}
+}
 
-	return nil
+// Status returns the current pod state for Node.
+func (n *Node) Status(ctx context.Context) (corev1.PodPhase, error) {
+	p, err := n.Pod(ctx)
+	if err != nil {
+		return corev1.PodUnknown, err
+	}
+	return p.Status.Phase, nil
 }
 
 // Pod returns the pod definition for the node.
