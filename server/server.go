@@ -1,8 +1,13 @@
 package main
 
-import "google.golang.org/grpc"
+import (
+	"log"
+	"net"
 
-type Server {}
+	"google.golang.org/grpc"
+)
+
+type Server struct{}
 
 const (
 	port = ":50051"
@@ -17,7 +22,6 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	pb.RegisterGreeterServer(s, &server{})
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

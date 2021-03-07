@@ -1,15 +1,16 @@
 package topo
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -219,7 +220,7 @@ func (n *Node) DeleteService(ctx context.Context) error {
 // It will wire up stdin, stdout, stderr to provided io channels.
 func (n *Node) Exec(ctx context.Context, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	req := n.kClient.CoreV1().RESTClient().Post().Resource("pods").Name(n.pb.Name).Namespace(n.namespace).SubResource("exec")
-	opts := &v1.PodExecOptions{
+	opts := &corev1.PodExecOptions{
 		Command: cmd,
 		Stdin:   true,
 		Stdout:  true,
@@ -257,6 +258,71 @@ func (n *Node) Status(ctx context.Context) (corev1.PodPhase, error) {
 // Pod returns the pod definition for the node.
 func (n *Node) Pod(ctx context.Context) (*corev1.Pod, error) {
 	return n.kClient.CoreV1().Pods(n.namespace).Get(ctx, n.pb.Name, metav1.GetOptions{})
+}
+
+var (
+	remountSys = []string{
+		"bin/sh",
+		"-c",
+		"mount -o ro,remount /sys; mount -o rw,remount /sys",
+	}
+	getBridge = []string{
+		"bin/sh",
+		"-c",
+		"ls /sys/class/net/ | grep br-",
+	}
+	enableIPForwarding = []string{
+		"bin/sh",
+		"-c",
+		"sysctl -w net.ipv4.ip_forward=1",
+	}
+)
+
+func enableLLDP(b string) []string {
+	return []string{
+		"bin/sh",
+		"-c",
+		fmt.Sprintf("echo 16384 > /sys/class/net/%s/bridge/group_fwd_mask", b),
+	}
+}
+
+// EnableLLDP enables LLDP on the pod.
+func (n *Node) EnableLLDP(ctx context.Context) error {
+	log.Infof("Enabling LLDP on node: %s", n.pb.Name)
+	stdout := bytes.NewBuffer([]byte{})
+	stderr := bytes.NewBuffer([]byte{})
+	if err := n.Exec(ctx, remountSys, nil, stdout, stderr); err != nil {
+		return err
+	}
+	log.Infof("stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	stdout.Reset()
+	stderr.Reset()
+	if err := n.Exec(ctx, getBridge, nil, stdout, stderr); err != nil {
+		return err
+	}
+	bridges := strings.Split(stdout.String(), "\n")
+	for _, b := range bridges {
+		stdout.Reset()
+		stderr.Reset()
+		cmd := enableLLDP(b)
+		if err := n.Exec(ctx, cmd, nil, stdout, stderr); err != nil {
+			return err
+		}
+		log.Infof("stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	return nil
+}
+
+// EnableIPForwarding enables IP forwarding on the pod.
+func (n *Node) EnableIPForwarding(ctx context.Context) error {
+	log.Infof("Enabling IP forwarding for node: %s", n.pb.Name)
+	stdout := bytes.NewBuffer([]byte{})
+	stderr := bytes.NewBuffer([]byte{})
+	if err := n.Exec(ctx, enableIPForwarding, nil, stdout, stderr); err != nil {
+		return err
+	}
+	log.Infof("stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	return nil
 }
 
 type Link struct {
