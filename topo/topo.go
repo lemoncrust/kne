@@ -12,7 +12,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -20,6 +23,8 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 
 	"github.com/golang/protobuf/proto"
+	topologyclientv1 "github.com/hfam/kne/api/clientset/v1beta1"
+	topologyv1 "github.com/hfam/kne/api/types/v1beta1"
 	topopb "github.com/hfam/kne/proto/topo"
 )
 
@@ -80,11 +85,27 @@ func (m *Manager) Create(ctx context.Context) error {
 	}
 	for _, l := range m.tpb.Links {
 		log.Info("Adding Link: %s:%s %s:%s", l.ANode, l.AInt, l.ZNode, l.ZInt)
-		m.links[k] = &Link{
+		sNode, ok := m.nodes[l.ANode]
+		if !ok {
+			return fmt.Errorf("invalid topology: missing node %q", l.ANode)
+		}
+		dNode, ok := m.nodes[l.ZNode]
+		if !ok {
+			return fmt.Errorf("invalid topology: missing node %q", l.ZNode)
+		}
+		if _, ok := sNode.interfaces[l.AInt]; ok {
+			return fmt.Errorf("interface %s:%s already connected", l.ANode, l.AInt)
+		}
+		if _, ok := dNode.interfaces[l.ZInt]; ok {
+			return fmt.Errorf("interface %s:%s already connected", l.ZNode, l.ZInt)
+		}
+		link := &Link{
 			namespace: m.tpb.Name,
 			pb:        l,
 			kClient:   m.clientset,
 		}
+		sNode.interfaces[l.AInt] = link
+		dNode.interfaces[l.ZInt] = link
 	}
 	return nil
 }
@@ -97,6 +118,24 @@ func (m *Manager) GetPods(ctx context.Context) error {
 	}
 	for _, p := range pods.Items {
 		fmt.Println(p.Namespace, p.Name)
+	}
+	return nil
+}
+
+func (m *Manager) Topology(ctx context.Context) error {
+	topologyv1.AddToScheme(scheme.Scheme)
+
+	clientSet, err := topologyclientv1.NewForConfig(m.rCfg)
+	if err != nil {
+		return fmt.Errorf("failed to get topology client: %v", err)
+	}
+
+	topology, err := clientSet.Topology("default").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get topology CRDs: %v", err)
+	}
+	for _, t := range topology.Items {
+		fmt.Printf("%+v\n", t)
 	}
 	return nil
 }
@@ -131,22 +170,24 @@ type Config struct {
 
 // Node is a node in the cluster.
 type Node struct {
-	id        int
-	namespace string
-	pb        *topopb.Node
-	kClient   *kubernetes.Clientset
-	rCfg      *rest.Config
-	cfg       Config
+	id         int
+	namespace  string
+	pb         *topopb.Node
+	kClient    *kubernetes.Clientset
+	rCfg       *rest.Config
+	cfg        Config
+	interfaces map[string]*Link
 }
 
 // NewNode creates a new node for use in the k8s cluster.  Configure will push the node to
 // the cluster.
 func NewNode(namespace string, pb *topopb.Node, kClient *kubernetes.Clientset, rCfg *rest.Config) *Node {
 	return &Node{
-		namespace: namespace,
-		pb:        pb,
-		rCfg:      rCfg,
-		kClient:   kClient,
+		namespace:  namespace,
+		pb:         pb,
+		rCfg:       rCfg,
+		kClient:    kClient,
+		interfaces: map[string]*Link{},
 	}
 }
 
@@ -322,6 +363,43 @@ func (n *Node) EnableIPForwarding(ctx context.Context) error {
 		return err
 	}
 	log.Infof("stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	return nil
+}
+
+var (
+	gvd = schema.GroupVersionResource{
+		Group:    "networkop.co.uk",
+		Resource: "topology",
+		Version:  "v1beta1",
+	}
+)
+
+// Push pushes the current topology to k8s.
+func (n *Node) Push(ctx context.Context) error {
+	c, err := dynamic.NewForConfig(n.rCfg)
+	if err != nil {
+		return err
+	}
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": fmt.Sprintf("%s/%s", gvd.Group, gvd.Version),
+			"kind":       "Topology",
+			"metadata": map[string]interface{}{
+				"name": n.pb.Name,
+				"labels": map[string]interface{}{
+					"topo": n.namespace,
+				},
+			},
+			"spec": map[string]interface{}{
+				"links": nil,
+			},
+		},
+	}
+	sObj, err := c.Resource(gvd).Namespace(n.namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	log.Infof("Server object: %v", sObj)
 	return nil
 }
 

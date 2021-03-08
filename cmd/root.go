@@ -39,7 +39,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&kubecfg, "kubecfg", defaultKubeCfg, "kubeconfig file")
 	rootCmd.AddCommand(createCmd)
 	//rootCmd.AddCommand(destroyCmd)
-	//rootCmd.AddCommand(showCmd)
+	rootCmd.AddCommand(showCmd)
 	//rootCmd.AddCommand(graphCmd)
 
 }
@@ -52,6 +52,14 @@ var (
 			fmt.Printf("Inside subCmd PreRun with args: %v\n", args)
 		},
 		RunE: createFn,
+	}
+	showCmd = &cobra.Command{
+		Use:   "show topology",
+		Short: "Show Topology",
+		PreRun: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("Inside subCmd PreRun with args: %v\n", args)
+		},
+		RunE: showFn,
 	}
 )
 
@@ -68,4 +76,17 @@ func createFn(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Topology:\n%s\n", proto.MarshalTextString(topopb))
 	return t.Create(cmd.Context())
+}
+
+func showFn(cmd *cobra.Command, args []string) error {
+	fmt.Printf("Inside Create with args: %v\n", args)
+	topopb, err := topo.Load(args[0])
+	if err != nil {
+		return err
+	}
+	t, err := topo.New(kubecfg, topopb)
+	if err != nil {
+		return err
+	}
+	return t.Topology(cmd.Context())
 }
