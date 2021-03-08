@@ -17,10 +17,11 @@ var (
 	topofile string
 
 	rootCmd = &cobra.Command{
-		Use:   "topo",
+		Use:   "kne_cli",
 		Short: "Kubernetes Network Emulation CLI",
 		Long: `Kubernetes Network Emulation CLI.  Works with meshnet to create 
-		layer 2 topology used by containers to layout networks in a k8s environment.`,
+layer 2 topology used by containers to layout networks in a k8s
+environment.`,
 		SilenceUsage: true,
 	}
 )
@@ -46,32 +47,36 @@ func init() {
 
 var (
 	createCmd = &cobra.Command{
-		Use:   "create topology",
-		Short: "Create Topology",
-		PreRun: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Inside subCmd PreRun with args: %v\n", args)
-		},
-		RunE: createFn,
+		Use:       "create <topology file>",
+		Short:     "Create Topology",
+		PreRunE:   validateTopology,
+		RunE:      createFn,
+		ValidArgs: []string{"topology"},
 	}
 	showCmd = &cobra.Command{
-		Use:   "show topology",
-		Short: "Show Topology",
-		PreRun: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Inside subCmd PreRun with args: %v\n", args)
-		},
-		RunE: showFn,
+		Use:       "show <topology file>",
+		Short:     "Show Topology",
+		PreRunE:   validateTopology,
+		RunE:      showFn,
+		ValidArgs: []string{"topology"},
 	}
 )
 
+func validateTopology(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%s: topology must be provided", cmd.Use)
+	}
+	return nil
+}
+
 func createFn(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Inside Create with args: %v\n", args)
 	topopb, err := topo.Load(args[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", cmd.Use, err)
 	}
 	t, err := topo.New(kubecfg, topopb)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", cmd.Use, err)
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Topology:\n%s\n", proto.MarshalTextString(topopb))
@@ -79,14 +84,13 @@ func createFn(cmd *cobra.Command, args []string) error {
 }
 
 func showFn(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Inside Create with args: %v\n", args)
 	topopb, err := topo.Load(args[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", cmd.Use, err)
 	}
 	t, err := topo.New(kubecfg, topopb)
 	if err != nil {
-		return err
+		return fmt.Errorf("%s: %w", cmd.Use, err)
 	}
 	return t.Topology(cmd.Context())
 }
