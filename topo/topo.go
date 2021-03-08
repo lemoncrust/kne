@@ -73,7 +73,7 @@ func New(kubecfg string, tpb *topopb.Topology) (*Manager, error) {
 
 // Create creates an instance of the managed topology.
 func (m *Manager) Create(ctx context.Context) error {
-	m.GetPods(ctx)
+	m.Pods(ctx)
 	for _, n := range m.tpb.Nodes {
 		log.Infof("Adding Node: %s:%s", n.Name, n.Type)
 		m.nodes[n.Name] = &Node{
@@ -110,9 +110,9 @@ func (m *Manager) Create(ctx context.Context) error {
 	return nil
 }
 
-// GetPods gets all pods in the managed k8s cluster.
-func (m *Manager) GetPods(ctx context.Context) error {
-	pods, err := m.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+// Pods gets all pods in the managed k8s cluster.
+func (m *Manager) Pods(ctx context.Context) error {
+	pods, err := m.clientset.CoreV1().Pods(m.tpb.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -122,6 +122,7 @@ func (m *Manager) GetPods(ctx context.Context) error {
 	return nil
 }
 
+// Topology gets the topology CRDs for the cluster.
 func (m *Manager) Topology(ctx context.Context) error {
 	topologyv1.AddToScheme(scheme.Scheme)
 
@@ -130,7 +131,7 @@ func (m *Manager) Topology(ctx context.Context) error {
 		return fmt.Errorf("failed to get topology client: %v", err)
 	}
 
-	topology, err := clientSet.Topology("default").List(ctx, metav1.ListOptions{})
+	topology, err := clientSet.Topology(m.tpb.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get topology CRDs: %v", err)
 	}
@@ -168,7 +169,7 @@ type Config struct {
 	outside      int32
 }
 
-// Node is a node in the cluster.
+// Node is a topology node in the cluster.
 type Node struct {
 	id         int
 	namespace  string
