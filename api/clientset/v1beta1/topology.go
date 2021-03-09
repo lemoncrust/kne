@@ -20,17 +20,18 @@ type TopologyInterface interface {
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 }
 
-type ClientInterface interface {
+// Interface is the clientset interface for topology.
+type Interface interface {
 	Topology(namespace string) TopologyInterface
 }
 
-// TopologyClient is a client for the topology crds.
-type TopologyClient struct {
+// Clientset is a client for the topology crds.
+type Clientset struct {
 	restClient rest.Interface
 }
 
-// NewForConfig returns a new TopologyClient based on c.
-func NewForConfig(c *rest.Config) (*TopologyClient, error) {
+// NewForConfig returns a new Clientset based on c.
+func NewForConfig(c *rest.Config) (*Clientset, error) {
 	config := *c
 	config.ContentConfig.GroupVersion = &schema.GroupVersion{Group: topologyv1.GroupName, Version: topologyv1.GroupVersion}
 	config.APIPath = "/apis"
@@ -42,12 +43,12 @@ func NewForConfig(c *rest.Config) (*TopologyClient, error) {
 		return nil, err
 	}
 
-	return &TopologyClient{restClient: client}, nil
+	return &Clientset{restClient: client}, nil
 }
 
-func (t *TopologyClient) Topology(namespace string) TopologyInterface {
+func (c *Clientset) Topology(namespace string) TopologyInterface {
 	return &topologyClient{
-		restClient: t.restClient,
+		restClient: c.restClient,
 		ns:         namespace,
 	}
 }
@@ -105,4 +106,8 @@ func (t *topologyClient) Watch(ctx context.Context, opts metav1.ListOptions) (wa
 		Resource("topology").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Watch(ctx)
+}
+
+func init() {
+	topologyv1.AddToScheme(scheme.Scheme)
 }

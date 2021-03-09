@@ -24,7 +24,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	topologyclientv1 "github.com/hfam/kne/api/clientset/v1beta1"
-	topologyv1 "github.com/hfam/kne/api/types/v1beta1"
 	topopb "github.com/hfam/kne/proto/topo"
 )
 
@@ -38,11 +37,12 @@ var (
 
 // Manager is a topology instance manager for k8s cluster instance.
 type Manager struct {
-	clientset *kubernetes.Clientset
-	rCfg      *rest.Config
-	tpb       *topopb.Topology
-	nodes     map[string]*Node
-	links     map[string]*Link
+	kClient kubernetes.Interface
+	tClient topologyclientv1.Interface
+	rCfg    *rest.Config
+	tpb     *topopb.Topology
+	nodes   map[string]*Node
+	links   map[string]*Link
 }
 
 // New creates a new topology manager based on the provided kubecfg and topology.
@@ -59,15 +59,20 @@ func New(kubecfg string, tpb *topopb.Topology) (*Manager, error) {
 		}
 	}
 	// create the clientset
-	clientset, err := kubernetes.NewForConfig(rCfg)
+	kClient, err := kubernetes.NewForConfig(rCfg)
+	if err != nil {
+		return nil, err
+	}
+	tClient, err := topologyclientv1.NewForConfig(rCfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Manager{
-		clientset: clientset,
-		rCfg:      rCfg,
-		tpb:       tpb,
+		kClient: kClient,
+		tClient: tClient,
+		rCfg:    rCfg,
+		tpb:     tpb,
 	}, nil
 }
 
@@ -79,7 +84,7 @@ func (m *Manager) Create(ctx context.Context) error {
 		m.nodes[n.Name] = &Node{
 			namespace: m.tpb.Name,
 			pb:        n,
-			kClient:   m.clientset,
+			kClient:   m.kClient,
 			rCfg:      m.rCfg,
 		}
 	}
@@ -102,7 +107,7 @@ func (m *Manager) Create(ctx context.Context) error {
 		link := &Link{
 			namespace: m.tpb.Name,
 			pb:        l,
-			kClient:   m.clientset,
+			kClient:   m.kClient,
 		}
 		sNode.interfaces[l.AInt] = link
 		dNode.interfaces[l.ZInt] = link
@@ -112,7 +117,7 @@ func (m *Manager) Create(ctx context.Context) error {
 
 // Pods gets all pods in the managed k8s cluster.
 func (m *Manager) Pods(ctx context.Context) error {
-	pods, err := m.clientset.CoreV1().Pods(m.tpb.Name).List(ctx, metav1.ListOptions{})
+	pods, err := m.kClient.CoreV1().Pods(m.tpb.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -124,14 +129,7 @@ func (m *Manager) Pods(ctx context.Context) error {
 
 // Topology gets the topology CRDs for the cluster.
 func (m *Manager) Topology(ctx context.Context) error {
-	topologyv1.AddToScheme(scheme.Scheme)
-
-	clientSet, err := topologyclientv1.NewForConfig(m.rCfg)
-	if err != nil {
-		return fmt.Errorf("failed to get topology client: %v", err)
-	}
-
-	topology, err := clientSet.Topology(m.tpb.Name).List(ctx, metav1.ListOptions{})
+	topology, err := m.tClient.Topology(m.tpb.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get topology CRDs: %v", err)
 	}
@@ -174,7 +172,7 @@ type Node struct {
 	id         int
 	namespace  string
 	pb         *topopb.Node
-	kClient    *kubernetes.Clientset
+	kClient    kubernetes.Interface
 	rCfg       *rest.Config
 	cfg        Config
 	interfaces map[string]*Link
@@ -182,7 +180,7 @@ type Node struct {
 
 // NewNode creates a new node for use in the k8s cluster.  Configure will push the node to
 // the cluster.
-func NewNode(namespace string, pb *topopb.Node, kClient *kubernetes.Clientset, rCfg *rest.Config) *Node {
+func NewNode(namespace string, pb *topopb.Node, kClient kubernetes.Interface, rCfg *rest.Config) *Node {
 	return &Node{
 		namespace:  namespace,
 		pb:         pb,
@@ -407,5 +405,5 @@ func (n *Node) Push(ctx context.Context) error {
 type Link struct {
 	namespace string
 	pb        *topopb.Link
-	kClient   *kubernetes.Clientset
+	kClient   kubernetes.Interface
 }
