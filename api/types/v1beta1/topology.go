@@ -16,7 +16,7 @@ type Link struct {
 	PeerIntf  string `json:"peer_intf"`
 	PeerIP    string `json:"peer_ip"`
 	PeerPod   string `json:"peer_pod"`
-	UID       int    `json:"UID"`
+	UID       int    `json:"uid"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

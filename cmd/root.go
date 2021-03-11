@@ -13,8 +13,10 @@ import (
 )
 
 var (
-	kubecfg  string
-	topofile string
+	defaultKubeCfg = ""
+	kubecfg        string
+	topofile       string
+	dryrun         bool
 
 	rootCmd = &cobra.Command{
 		Use:   "kne_cli",
@@ -32,14 +34,14 @@ func ExecuteContext(ctx context.Context) error {
 }
 
 func init() {
-	defaultKubeCfg := ""
 	if home := homedir.HomeDir(); home != "" {
 		defaultKubeCfg = filepath.Join(home, ".kube", "config")
 	}
 	rootCmd.SetOut(os.Stdout)
 	rootCmd.PersistentFlags().StringVar(&kubecfg, "kubecfg", defaultKubeCfg, "kubeconfig file")
+	createCmd.Flags().BoolVar(&dryrun, "dryrun", false, "Generate topology but do not push to k8s")
 	rootCmd.AddCommand(createCmd)
-	//rootCmd.AddCommand(destroyCmd)
+	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(showCmd)
 	//rootCmd.AddCommand(graphCmd)
 
@@ -51,6 +53,13 @@ var (
 		Short:     "Create Topology",
 		PreRunE:   validateTopology,
 		RunE:      createFn,
+		ValidArgs: []string{"topology"},
+	}
+	deleteCmd = &cobra.Command{
+		Use:       "delete <topology file>",
+		Short:     "Delete Topology",
+		PreRunE:   validateTopology,
+		RunE:      deleteFn,
 		ValidArgs: []string{"topology"},
 	}
 	showCmd = &cobra.Command{
@@ -80,7 +89,33 @@ func createFn(cmd *cobra.Command, args []string) error {
 	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Topology:\n%s\n", proto.MarshalTextString(topopb))
-	return t.Create(cmd.Context())
+	if err := t.Load(cmd.Context()); err != nil {
+		return fmt.Errorf("failed to load topology: %w", err)
+	}
+	if dryrun {
+		return nil
+	}
+	return t.Push(cmd.Context())
+}
+
+func deleteFn(cmd *cobra.Command, args []string) error {
+	topopb, err := topo.Load(args[0])
+	if err != nil {
+		return fmt.Errorf("%s: %w", cmd.Use, err)
+	}
+	t, err := topo.New(kubecfg, topopb)
+	if err != nil {
+		return fmt.Errorf("%s: %w", cmd.Use, err)
+	}
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Topology:\n%s\n", proto.MarshalTextString(topopb))
+	if err := t.Load(cmd.Context()); err != nil {
+		return fmt.Errorf("failed to load topology: %w", err)
+	}
+	if dryrun {
+		return nil
+	}
+	return t.Delete(cmd.Context())
 }
 
 func showFn(cmd *cobra.Command, args []string) error {

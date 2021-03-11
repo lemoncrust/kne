@@ -76,7 +76,7 @@ func (t *topologyClient) Get(ctx context.Context, name string, opts metav1.GetOp
 	err := t.restClient.
 		Get().
 		Namespace(t.ns).
-		Resource("topology").
+		Resource("topologies").
 		Name(name).
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Do(ctx).
@@ -90,7 +90,7 @@ func (t *topologyClient) Create(ctx context.Context, topology *topologyv1.Topolo
 	err := t.restClient.
 		Post().
 		Namespace(t.ns).
-		Resource("topology").
+		Resource("topologies").
 		Body(topology).
 		Do(ctx).
 		Into(&result)
