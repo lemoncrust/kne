@@ -37,12 +37,19 @@ message Node {
     AristaCEOS = 2;
     JuniperCEVO = 3;
     CiscoCXR = 4;
+    Quagga = 5;
+    FRR = 6;
+    JuniperVMX = 7;
+    CiscoCSR = 8;
   }
 
   string name = 1;
   Type type = 2;
   string version = 3;
   map<string,string> labels = 4;
+  Config config = 5;
+  map<uint32, Service> services = 6;
+  map<string, string> constraints = 7;
 }
 
 // Link is single link between nodes in the topology.
@@ -51,4 +58,25 @@ message Link {
   string a_int = 2;
   string z_node = 3;
   string z_int = 4; 
+}
+
+message Config {
+  repeated string command = 1;
+  repeated string args = 2;
+  string image = 3;
+  map<string, string> env = 4;
+  string entry_command = 5;
+  string config_path = 6;
+  string config_file = 7;
+  uint32 sleep = 8;
+  oneof config_data {
+     bytes data = 101;
+     string file = 102;
+  }
+}
+
+message Service {
+  string name = 1;
+  uint32 inside = 2;
+  uint32 outside = 3;
 }
