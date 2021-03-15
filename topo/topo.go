@@ -33,6 +33,13 @@ import (
 	topologyv1 "github.com/hfam/kne/api/types/v1beta1"
 	topopb "github.com/hfam/kne/proto/topo"
 	"github.com/hfam/kne/topo/node"
+
+	_ "github.com/hfam/kne/topo/node/ceos"
+	_ "github.com/hfam/kne/topo/node/csr"
+	_ "github.com/hfam/kne/topo/node/cxr"
+	_ "github.com/hfam/kne/topo/node/frr"
+	_ "github.com/hfam/kne/topo/node/host"
+	_ "github.com/hfam/kne/topo/node/quagga"
 )
 
 var (
@@ -218,12 +225,29 @@ func (m *Manager) Delete(ctx context.Context) error {
 	if _, err := m.kClient.CoreV1().Namespaces().Get(ctx, m.tpb.Name, metav1.GetOptions{}); err != nil {
 		return fmt.Errorf("topology %q does not exist in cluster", m.tpb.Name)
 	}
-	prop := metav1.DeletePropagationForeground
+	// Delete topology pods
+	for _, n := range m.nodes {
+		// Delete Service for node
+		n.DeleteService(ctx)
+		// Delete config maps for node
+		n.Delete(ctx)
+		// Delete Pod
+		if err := m.kClient.CoreV1().Pods(m.tpb.Name).Delete(ctx, n.Name(), metav1.DeleteOptions{}); err != nil {
+			log.Warnf("Error deleting pod %q: %v", n.Name(), err)
+		}
+		// Delete Topology for node
+		if err := m.tClient.Topology(m.tpb.Name).Delete(ctx, n.Name(), metav1.DeleteOptions{}); err != nil {
+			log.Warnf("Error deleting topology %q: %v", n.Name(), err)
+		}
+	}
+	// Delete namespace
+	/*prop := metav1.DeletePropagationForeground
 	if err := m.kClient.CoreV1().Namespaces().Delete(ctx, m.tpb.Name, metav1.DeleteOptions{
 		PropagationPolicy: &prop,
 	}); err != nil {
 		return err
 	}
+	*/
 	return nil
 }
 

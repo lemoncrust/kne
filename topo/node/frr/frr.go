@@ -37,5 +37,5 @@ func defaults(pb *topopb.Node) error {
 }
 
 func init() {
-	node.Register(topopb.Node_Host, New)
+	node.Register(topopb.Node_FRR, New)
 }

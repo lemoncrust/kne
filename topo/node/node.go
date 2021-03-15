@@ -10,11 +10,9 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -37,6 +35,9 @@ var (
 
 func Register(t topopb.Node_Type, fn NewNodeFn) {
 	mu.Lock()
+	if _, ok := nodeTypes[t]; ok {
+		panic(fmt.Sprintf("duplicate registration for %T", t))
+	}
 	nodeTypes[t] = fn
 	mu.Unlock()
 }
@@ -81,19 +82,21 @@ func (n *Node) Configure(ctx context.Context) error {
 	case *topopb.Config_Data:
 		data = v.Data
 	}
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("%s-config", pb.Name),
-		},
-		Data: map[string]string{
-			pb.Config.ConfigFile: string(data),
-		},
+	if data != nil {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: fmt.Sprintf("%s-config", pb.Name),
+			},
+			Data: map[string]string{
+				pb.Config.ConfigFile: string(data),
+			},
+		}
+		sCM, err := n.kClient.CoreV1().ConfigMaps(n.namespace).Create(ctx, cm, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+		log.Infof("Server Config Map:\n%v\n", sCM)
 	}
-	sCM, err := n.kClient.CoreV1().ConfigMaps(n.namespace).Create(ctx, cm, metav1.CreateOptions{})
-	if err != nil {
-		return err
-	}
-	log.Infof("Server Config Map:\n%v\n", sCM)
 	return nil
 }
 
@@ -136,6 +139,7 @@ var (
 // CreatePod creates the pod for the node.
 func (n *Node) CreatePod(ctx context.Context) error {
 	pb := n.impl.Proto()
+	log.Infof("Creating Pod:\n %+v", pb)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: pb.Name,
@@ -174,13 +178,13 @@ func (n *Node) CreatePod(ctx context.Context) error {
 						Weight: 100,
 						PodAffinityTerm: corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{},
 								MatchExpressions: []metav1.LabelSelectorRequirement{{
 									Key:      "topo",
 									Operator: "In",
 									Values:   []string{pb.Name},
 								}},
 							},
+							TopologyKey: "kubernetes.io/hostname",
 						},
 					}},
 				},
@@ -211,6 +215,9 @@ func (n *Node) CreatePod(ctx context.Context) error {
 func (n *Node) CreateService(ctx context.Context) error {
 	pb := n.impl.Proto()
 	var servicePorts []corev1.ServicePort
+	if len(pb.Services) == 0 {
+		return nil
+	}
 	for k, v := range pb.Services {
 		sp := corev1.ServicePort{
 			Name:       fmt.Sprintf("port-%d", k),
@@ -379,14 +386,6 @@ func getImpl(pb *topopb.Node) (Interface, error) {
 	}
 	return fn(pb)
 }
-
-var (
-	gvd = schema.GroupVersionResource{
-		Group:    "networkop.co.uk",
-		Resource: "topology",
-		Version:  "v1beta1",
-	}
-)
 
 type Link struct {
 	UID   int

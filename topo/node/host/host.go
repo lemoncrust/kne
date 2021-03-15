@@ -3,13 +3,14 @@ package host
 import (
 	"fmt"
 
-	"google.golang.org/protobuf/proto"
-
 	topopb "github.com/hfam/kne/proto/topo"
 	"github.com/hfam/kne/topo/node"
 )
 
 func New(pb *topopb.Node) (node.Interface, error) {
+	if err := defaults(pb); err != nil {
+		return nil, err
+	}
 	return &Node{
 		pb: pb,
 	}, nil
@@ -32,7 +33,6 @@ func defaults(pb *topopb.Node) error {
 		ConfigPath:   "/etc",
 		ConfigFile:   "config",
 	}
-	proto.Merge(cfg, pb.Config)
 	pb.Config = cfg
 	return nil
 }
