@@ -241,13 +241,12 @@ func (m *Manager) Delete(ctx context.Context) error {
 		}
 	}
 	// Delete namespace
-	/*prop := metav1.DeletePropagationForeground
+	prop := metav1.DeletePropagationForeground
 	if err := m.kClient.CoreV1().Namespaces().Delete(ctx, m.tpb.Name, metav1.DeleteOptions{
 		PropagationPolicy: &prop,
 	}); err != nil {
 		return err
 	}
-	*/
 	return nil
 }
 
