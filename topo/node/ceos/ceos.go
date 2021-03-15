@@ -41,7 +41,15 @@ func defaults(pb *topopb.Node) error {
 	if pb.Config.Image == "" {
 		pb.Config.Image = "ceos:latest"
 	}
-	pb.Config.Command = []string{"/sbin/init"}
+	pb.Config.Command = []string{
+		"/sbin/init",
+		"systemd.setenv=INTFTYPE=eth",
+		"systemd.setenv=ETBA=1",
+		"systemd.setenv=SKIP_ZEROTOUCH_BARRIER_IN_SYSDBINIT=1",
+		"systemd.setenv=CEOS=1",
+		"systemd.setenv=EOS_PLATFORM=ceoslab",
+		"systemd.setenv=container=docker",
+	}
 	pb.Config.Env = map[string]string{
 		"CEOS":                                "1",
 		"EOS_PLATFORM":                        "ceoslab",
