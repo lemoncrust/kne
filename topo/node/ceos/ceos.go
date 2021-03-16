@@ -5,6 +5,7 @@ import (
 
 	topopb "github.com/hfam/kne/proto/topo"
 	"github.com/hfam/kne/topo/node"
+	"google.golang.org/protobuf/proto"
 )
 
 func New(pb *topopb.Node) (node.Interface, error) {
@@ -25,46 +26,51 @@ func (n *Node) Proto() *topopb.Node {
 }
 
 func defaults(pb *topopb.Node) error {
-	if _, ok := pb.Services[443]; !ok {
-		pb.Services[443] = &topopb.Service{
-			Name:    "ssl",
-			Inside:  443,
-			Outside: node.GetNextPort(),
-		}
+	cfg := &topopb.Node{
+		Constraints: map[string]string{
+			"cpu":    "0.5",
+			"memory": "1Gi",
+		},
+		Services: map[uint32]*topopb.Service{
+			443: {
+				Name:    "ssl",
+				Inside:  443,
+				Outside: node.GetNextPort(),
+			},
+		},
+		Labels: map[string]string{
+			"type": topopb.Node_AristaCEOS.String(),
+		},
+		Config: &topopb.Config{
+			Image: "ceos:latest",
+			Command: []string{
+				"/sbin/init",
+				"systemd.setenv=INTFTYPE=eth",
+				"systemd.setenv=ETBA=1",
+				"systemd.setenv=SKIP_ZEROTOUCH_BARRIER_IN_SYSDBINIT=1",
+				"systemd.setenv=CEOS=1",
+				"systemd.setenv=EOS_PLATFORM=ceoslab",
+				"systemd.setenv=container=docker",
+			},
+			Env: map[string]string{
+				"CEOS":                                "1",
+				"EOS_PLATFORM":                        "ceoslab",
+				"container":                           "docker",
+				"ETBA":                                "1",
+				"SKIP_ZEROTOUCH_BARRIER_IN_SYSDBINIT": "1",
+				"INTFTYPE":                            "eth",
+			},
+			EntryCommand: fmt.Sprintf("kubectl exec -it %s -- Cli", pb.Name),
+			ConfigPath:   "/mnt/flash",
+			ConfigFile:   "startup-config",
+		},
 	}
 	for _, v := range pb.Services {
 		if v.Outside == 0 {
 			v.Outside = node.GetNextPort()
 		}
 	}
-	pb.Labels["type"] = topopb.Node_AristaCEOS.String()
-	if pb.Config.Image == "" {
-		pb.Config.Image = "ceos:latest"
-	}
-	pb.Config.Command = []string{
-		"/sbin/init",
-		"systemd.setenv=INTFTYPE=eth",
-		"systemd.setenv=ETBA=1",
-		"systemd.setenv=SKIP_ZEROTOUCH_BARRIER_IN_SYSDBINIT=1",
-		"systemd.setenv=CEOS=1",
-		"systemd.setenv=EOS_PLATFORM=ceoslab",
-		"systemd.setenv=container=docker",
-	}
-	pb.Config.Env = map[string]string{
-		"CEOS":                                "1",
-		"EOS_PLATFORM":                        "ceoslab",
-		"container":                           "docker",
-		"ETBA":                                "1",
-		"SKIP_ZEROTOUCH_BARRIER_IN_SYSDBINIT": "1",
-		"INTFTYPE":                            "eth",
-	}
-	pb.Config.EntryCommand = fmt.Sprintf("kubectl exec -it %s -- Cli", pb.Name)
-	if pb.Config.ConfigData != nil {
-		pb.Config.ConfigPath = "/mnt/flash"
-		pb.Config.ConfigFile = "startup-config"
-	}
-	pb.Constraints["cpu"] = "0.5"
-	pb.Constraints["memory"] = "1Gi"
+	proto.Merge(pb, cfg)
 	return nil
 }
 

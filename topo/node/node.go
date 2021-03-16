@@ -121,7 +121,9 @@ func toEnvVar(kv map[string]string) []corev1.EnvVar {
 }
 
 func toResourceRequirements(kv map[string]string) corev1.ResourceRequirements {
-	r := corev1.ResourceRequirements{}
+	r := corev1.ResourceRequirements{
+		Requests: map[corev1.ResourceName]resource.Quantity{},
+	}
 	if v, ok := kv["cpu"]; ok {
 		r.Requests["cpu"] = resource.MustParse(v)
 	}
@@ -207,7 +209,7 @@ func (n *Node) CreatePod(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create pod for %q: %w", pb.Name, err)
 	}
-	log.Infof("Pod creates:\n%+v\n", sPod)
+	log.Debugf("Pod created:\n%+v\n", sPod)
 	return nil
 }
 
