@@ -6,7 +6,7 @@ nodes: {
         image: "busybox:latest"
         command: "sleep"
         args: "36000"
-        config_path: "/etc"
+        config_path: "/etc/custom"
         config_file: "test-config.conf"
         data: "some config content"
     }
