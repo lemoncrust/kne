@@ -40,6 +40,7 @@ import (
 	_ "github.com/hfam/kne/topo/node/frr"
 	_ "github.com/hfam/kne/topo/node/host"
 	_ "github.com/hfam/kne/topo/node/quagga"
+	_ "github.com/hfam/kne/topo/node/unknown"
 )
 
 var (
