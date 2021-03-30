@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"sync"
 
 	"github.com/golang/protobuf/proto"
@@ -162,6 +163,22 @@ func (m *Manager) Topology(ctx context.Context) error {
 	return nil
 }
 
+func getIntName(desc string) string {
+	if strings.Contains(desc, ":") {
+		return strings.Split(desc, ":")[0]
+	} else {
+		return desc
+	}
+}
+
+func getIntIP(desc string) string {
+	if strings.Contains(desc, ":") {
+		return strings.Split(desc, ":")[1]
+	} else {
+		return ""
+	}
+}
+
 // Push pushes the current topology to k8s.
 func (m *Manager) Push(ctx context.Context) error {
 	if _, err := m.kClient.CoreV1().Namespaces().Get(ctx, m.tpb.Name, metav1.GetOptions{}); err != nil {
@@ -189,10 +206,10 @@ func (m *Manager) Push(ctx context.Context) error {
 		var links []topologyv1.Link
 		for _, intf := range n.Interfaces {
 			link := topologyv1.Link{
-				LocalIntf: intf.Proto.AInt,
-				LocalIP:   "",
-				PeerIntf:  intf.Proto.ZInt,
-				PeerIP:    "",
+				LocalIntf: getIntName(intf.Proto.AInt),
+				LocalIP:   getIntIP(intf.Proto.AInt),
+				PeerIntf:  getIntName(intf.Proto.ZInt),
+				PeerIP:    getIntIP(intf.Proto.ZInt),
 				PeerPod:   intf.Proto.ZNode,
 				UID:       intf.UID,
 			}
