@@ -193,6 +193,21 @@ func (n *Node) CreatePod(ctx context.Context) error {
 			},
 		},
 	}
+	if conf_img, ok := pb.Labels["configurator.networkop.co.uk"]; ok {
+		log.Infof("Found configurator annotation!")
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+			Name:            fmt.Sprintf("configure-%s", pb.Name),
+			Image:           conf_img,
+			ImagePullPolicy: "IfNotPresent",
+			// To be removed later - needs to externally configurable
+			Env: []corev1.EnvVar{
+				{
+					Name:  "PYTHONUNBUFFERED",
+					Value: "0",
+				},
+			},
+		})
+	}
 	if pb.Config.ConfigData != nil {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
 			Name: "startup-config-volume",
@@ -204,11 +219,14 @@ func (n *Node) CreatePod(ctx context.Context) error {
 				},
 			},
 		})
-		pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "startup-config-volume",
-			MountPath: pb.Config.ConfigPath,
-			ReadOnly:  true,
-		})
+		for i, c := range pod.Spec.Containers {
+			log.Infof("Adding volume mount to %s", c.Name)
+			pod.Spec.Containers[i].VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+				Name:      "startup-config-volume",
+				MountPath: pb.Config.ConfigPath,
+				ReadOnly:  true,
+			})
+		}
 	}
 	sPod, err := n.kClient.CoreV1().Pods(n.namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
