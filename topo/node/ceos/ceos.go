@@ -3,8 +3,8 @@ package ceos
 import (
 	"fmt"
 
-	topopb "github.com/hfam/kne/proto/topo"
-	"github.com/hfam/kne/topo/node"
+	topopb "github.com/h-fam/kne/proto/topo"
+	"github.com/h-fam/kne/topo/node"
 	"google.golang.org/protobuf/proto"
 )
 

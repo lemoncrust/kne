@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 
-	topopb "github.com/hfam/kne/proto/topo"
+	topopb "github.com/h-fam/kne/proto/topo"
 )
 
 type Interface interface {

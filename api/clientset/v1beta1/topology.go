@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 
-	topologyv1 "github.com/hfam/kne/api/types/v1beta1"
+	topologyv1 "github.com/h-fam/kne/api/types/v1beta1"
 )
 
 // TopologyInterface provides access to the Topology CRD.

@@ -5,8 +5,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	topopb "github.com/hfam/kne/proto/topo"
-	"github.com/hfam/kne/topo/node"
+	topopb "github.com/h-fam/kne/proto/topo"
+	"github.com/h-fam/kne/topo/node"
 )
 
 func New(pb *topopb.Node) (node.Interface, error) {
