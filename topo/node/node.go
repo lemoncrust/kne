@@ -3,6 +3,7 @@ package node
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -142,12 +143,16 @@ var (
 func (n *Node) CreatePod(ctx context.Context) error {
 	pb := n.impl.Proto()
 	log.Infof("Creating Pod:\n %+v", pb)
+	ann, _ := json.Marshal(pb)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: pb.Name,
 			Labels: map[string]string{
 				"app":  pb.Name,
 				"topo": n.namespace,
+			},
+			Annotations: map[string]string{
+				"kne/spec": string(ann),
 			},
 		},
 		Spec: corev1.PodSpec{
