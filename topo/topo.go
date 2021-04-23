@@ -200,6 +200,9 @@ func (m *Manager) Push(ctx context.Context) error {
 		t := &topologyv1.Topology{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: n.Name(),
+				Annotations: map[string]string{
+					"kne/spec": n.GetAnnotation(),
+				},
 			},
 			Spec: topologyv1.TopologySpec{},
 		}

@@ -139,6 +139,11 @@ var (
 	gracePeriod int64 = 0
 )
 
+func (n *Node) GetAnnotation() string {
+	ann, _ := json.Marshal(n.impl.Proto())
+	return string(ann)
+}
+
 // CreatePod creates the pod for the node.
 func (n *Node) CreatePod(ctx context.Context) error {
 	pb := n.impl.Proto()
