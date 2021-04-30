@@ -70,6 +70,10 @@ func defaults(pb *topopb.Node) error {
 			v.Outside = node.GetNextPort()
 		}
 	}
+	// This is to allow explicitly provided configuration fields to overwrite
+	// the ones provided by default implementation, i.e. 'image' tag for example
+	// It works, but might need a more intelligent implementation in production
+	proto.Merge(cfg, pb)
 	proto.Merge(pb, cfg)
 	return nil
 }
