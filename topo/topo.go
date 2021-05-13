@@ -29,10 +29,10 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	topologyclientv1 "github.com/hfam/kne/api/clientset/v1beta1"
-	topologyv1 "github.com/hfam/kne/api/types/v1beta1"
-	topopb "github.com/hfam/kne/proto/topo"
-	"github.com/hfam/kne/topo/node"
+	topologyclientv1 "github.com/h-fam/kne/api/clientset/v1beta1"
+	topologyv1 "github.com/h-fam/kne/api/types/v1beta1"
+	topopb "github.com/h-fam/kne/proto/topo"
+	"github.com/h-fam/kne/topo/node"
 
 	_ "github.com/hfam/kne/topo/node/ceos"
 	_ "github.com/hfam/kne/topo/node/csr"
@@ -41,6 +41,7 @@ import (
 	_ "github.com/hfam/kne/topo/node/host"
 	_ "github.com/hfam/kne/topo/node/quagga"
 	_ "github.com/hfam/kne/topo/node/unknown"
+
 )
 
 var (
@@ -262,6 +263,31 @@ func Load(fName string) (*topopb.Topology, error) {
 		return nil, err
 	}
 	return t, nil
+}
+
+type Resources struct {
+	Services   map[string]*corev1.Service
+	Pods       map[string]*corev1.Pod
+	ConfigMaps map[string]*corev1.ConfigMap
+	Topologies map[string]*topologyv1.Topology
+}
+
+// Resources gets the currently configured resources from the topology.
+func (m *Manager) Resources(ctx context.Context) (*Resources, error) {
+	r := Resources{
+		Services:   map[string]*corev1.Service{},
+		Pods:       map[string]*corev1.Pod{},
+		ConfigMaps: map[string]*corev1.ConfigMap{},
+		Topologies: map[string]*topologyv1.Topology{},
+	}
+	for _, n := range m.nodes {
+		p, err := n.Pod(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r.Pods[p.Name] = p
+	}
+	return &r, nil
 }
 
 var (

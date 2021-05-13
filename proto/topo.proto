@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 
-option go_package = "github.com/hfam/kne/proto/topo";
+option go_package = "github.com/h-fam/kne/proto/topo";
 
 package topo;
 

@@ -1,4 +1,4 @@
-module github.com/hfam/kne
+module github.com/h-fam/kne
 
 go 1.16
 
